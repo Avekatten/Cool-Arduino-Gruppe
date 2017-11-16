@@ -46,8 +46,8 @@ unsigned char outbyte = 0;
 unsigned char cbit = 0x80;
 
 // variables for throttle
-unsigned char locoSpeed=0;
-unsigned char dir=1; //forward
+// unsigned char locoSpeed=0;
+
 unsigned char locoAdr=36;   // this is the (fixed) address of the loco
 unsigned char skifteAdr=0x9A;
 unsigned char sound=0;
@@ -75,7 +75,6 @@ struct Message msg[MAXMSG] =
                                 
 int msgIndex=0;  
 int byteIndex=0;
-
 
 //Setup Timer2.
 //Configures the 8-Bit Timer2 to generate an interrupt at the specified frequency.
@@ -218,6 +217,13 @@ void setup(void)
   pinMode(trigPin, OUTPUT); // Sets the trigPin as an Output
   pinMode(echoPin, INPUT); // Sets the echoPin as an Input
   Serial.begin(9600); // Starts the serial communication
+
+   i = digitalRead(dirpin);
+   j = digitalRead(soundpin);
+   k = digitalRead(skiftepinOne);
+   l = digitalRead(skiftepinTwo);
+   m = digitalRead(skiftepinThree);
+   n = digitalRead(skiftepinFour);
   
   assemble_dcc_msg();
     
@@ -229,57 +235,22 @@ void loop(void)
 {
   delay(200);
   Ultrasound();
+  Serial.print("Distance: ");
+  Serial.println(distance);
+  checkForPassing(); // Sætter booleans for om et tog er igang med at passere eller passeret
+  decideTrainOrder(); // Sætter ordren til stop hvis et tog er passeret ellers sender vi kør
   assemble_dcc_msg();
 }
 
-
-
 void assemble_dcc_msg() 
 {  
-   i = digitalRead(dirpin);
-   j = digitalRead(soundpin);
-   k = digitalRead(skiftepinOne);
-   l = digitalRead(skiftepinTwo);
-   m = digitalRead(skiftepinThree);
-   n = digitalRead(skiftepinFour);
-
-   Serial.print("Distance: ");
-   Serial.println(distance);
-
-
-   checkForPassing();
-
-   decideTrainOrder();
-
-   if (k == LOW)
-   {
-      skiftSpor = 1;
-   }
-   else if (l == LOW)
-   {
-      skiftSpor = 2;
-   }
-   else if (m == LOW)
-   {
-      skiftSpor = 3;
-   }
-   else if (n == LOW)
-   {
-      skiftSpor = 4;
-   }
-   else
-   {
-      skiftSpor = 0;
-      harSendt = false;
-   }
-   
-   
    noInterrupts();  // make sure that only "matching" parts of the message are used in ISR
-    if (changeTrainTracks == true)
+   
+   if (changeTrainTracks == true) // Send til skiftespor
    {
       if (trainTrack == 0)
       {
-          Serial.println("1");
+          Serial.println("Skiftespor drej");
           msg[1].data[0] = 0x9A;
           msg[2].data[0] = 0x9A; 
           msg[1].data[1] = 0xF8;
@@ -290,7 +261,7 @@ void assemble_dcc_msg()
       }
       else if (trainTrack == 1)
       {
-          Serial.println("2");
+          Serial.println("Skiftespor ligud");
           msg[1].data[0] = 0x9A;
           msg[2].data[0] = 0x9A; 
           msg[1].data[1] = 0xF9;
@@ -300,69 +271,29 @@ void assemble_dcc_msg()
           trainTrack = 0;
       }
    }
-   else if (skiftSpor == 0 || harSendt)
+   else // Send til tog
    {
-      Serial.println("0");
+      Serial.println("Sender til tog");
       msg[1].data[0] = locoAdr;
       msg[2].data[0] = locoAdr; 
       msg[1].data[1] = data;
       msg[2].data[1] = data; 
    }
-   /*else if (skiftSpor == 1) // 101 drej
-   {
-      Serial.println("1");
-      msg[1].data[0] = 0x9A;
-      msg[2].data[0] = 0x9A; 
-      msg[1].data[1] = 0xF8;
-      msg[2].data[1] = 0xF0;
-
-      harSendt = true;
-   }
-   else if (skiftSpor == 2)// 101 ligeud
-   {
-      Serial.println("2");
-      msg[1].data[0] = 0x9A;
-      msg[2].data[0] = 0x9A; 
-      msg[1].data[1] = 0xF9;
-      msg[2].data[1] = 0xF1; 
-
-      harSendt = true;
-   }
-   else if (skiftSpor == 3) // 102 drej
-   {
-      Serial.println("3");
-      msg[1].data[0] = 0x9A;
-      msg[2].data[0] = 0x9A; 
-      msg[1].data[1] = 0xFA;
-      msg[2].data[1] = 0xF2;
-
-      harSendt = true;
-   }
-   else if (skiftSpor == 4)// 102 ligeud
-   {
-      Serial.println("4");
-      msg[1].data[0] = 0x9A;
-      msg[2].data[0] = 0x9A; 
-      msg[1].data[1] = 0xFB;
-      msg[2].data[1] = 0xF3;
-
-      harSendt = true;
-   } */
    
-   Serial.println(msg[1].data[1]);
-   Serial.println(msg[1].data[0]);
-   msg[1].data[2] = msg[1].data[0] ^ msg[1].data[1];
+   printOrdreAdresse();  // Serial prints for debugging
+   
+   msg[1].data[2] = msg[1].data[0] ^ msg[1].data[1]; // XOR bytes
    msg[2].data[2] = msg[2].data[0] ^ msg[2].data[1];
   
    interrupts();
 
-   if (trainChanged)
+   if (trainChanged) // Når vi har skiftet tog adressen
    {
-      changeTrainTracks = true;
+      changeTrainTracks = true; // skifter vi sporskiftet
       trainChanged = false;
    }
    
-   if (stopSend == true) // if stop has been send we swap the train adress
+   if (stopSend == true) // Når vi har stoppet toget skifter vi adressen
    {
       if (locoAdr == togAdrEt)
       {
@@ -397,7 +328,6 @@ void Ultrasound()
 
 void checkForPassing()
 {
-  
    if (innerPassing == false && outerPassing == false)
    {
      if (distance < 6)
@@ -452,5 +382,79 @@ void decideTrainOrder()
         data = 0x46; // Backwards if pin
       }  
    }
+}
+
+void pinCheck() // ikke implementeret
+{
+  if (k == LOW)
+   {
+      skiftSpor = 1;
+   }
+   else if (l == LOW)
+   {
+      skiftSpor = 2;
+   }
+   else if (m == LOW)
+   {
+      skiftSpor = 3;
+   }
+   else if (n == LOW)
+   {
+      skiftSpor = 4;
+   }
+   else
+   {
+      skiftSpor = 0;
+      harSendt = false;
+   }
+
+   if (skiftSpor == 1) // 101 drej
+   {
+      Serial.println("1");
+      msg[1].data[0] = 0x9A;
+      msg[2].data[0] = 0x9A; 
+      msg[1].data[1] = 0xF8;
+      msg[2].data[1] = 0xF0;
+
+      harSendt = true;
+   }
+   else if (skiftSpor == 2)// 101 ligeud
+   {
+      Serial.println("2");
+      msg[1].data[0] = 0x9A;
+      msg[2].data[0] = 0x9A; 
+      msg[1].data[1] = 0xF9;
+      msg[2].data[1] = 0xF1; 
+
+      harSendt = true;
+   }
+   else if (skiftSpor == 3) // 102 drej
+   {
+      Serial.println("3");
+      msg[1].data[0] = 0x9A;
+      msg[2].data[0] = 0x9A; 
+      msg[1].data[1] = 0xFA;
+      msg[2].data[1] = 0xF2;
+
+      harSendt = true;
+   }
+   else if (skiftSpor == 4)// 102 ligeud
+   {
+      Serial.println("4");
+      msg[1].data[0] = 0x9A;
+      msg[2].data[0] = 0x9A; 
+      msg[1].data[1] = 0xFB;
+      msg[2].data[1] = 0xF3;
+
+      harSendt = true;
+   }
+}
+
+void printOrdreAdresse()
+{
+   Serial.print("Odre: ");
+   Serial.println(msg[1].data[1]);
+   Serial.print("Adresse: ");
+   Serial.println(msg[1].data[0]);
 }
 
