@@ -1,6 +1,6 @@
 #define DCC_PIN    4  // Arduino pin for DCC out 
-#define togAdrEt 36
-#define togAdrTo 40
+#define togAdrEt 40
+#define togAdrTo 36
 
 boolean setupDone = false;
 unsigned char data, xdata;
@@ -27,7 +27,7 @@ struct trainOrders
 {
   int backwards = 0x46;
   int forwards = 0x66;
-  int tStop = 0x41;
+  int tStop = 0x60;
 
 } train;
 
@@ -36,14 +36,14 @@ struct skifteSporStruct
 {
   int address;
   int straightCommando1;
-  int straightCommando2;
+  int straightCommando2;  
   int turnCommando1;
   int turnCommando2;
 };
 skifteSporStruct skifteSpor101 = {.address = 0x9a, .straightCommando1 = 0xF9, .straightCommando2 = 0xF1, .turnCommando1 = 0xF8, .turnCommando2 = 0xF0};
 
-skifteSporStruct skifteSpor102 = {.address = 0x9a, .straightCommando1 = 0xFB, .straightCommando2 = 0xF3, .turnCommando1 = 0xFA, .turnCommando2 = 0xF2};
-int aktuelleSkifteSpor = 101;
+skifteSporStruct skifteSpor102 = {.address = 0x9a, .straightCommando1 = 0xFb, .straightCommando2 = 0xF3, .turnCommando1 = 0xFa, .turnCommando2 = 0xF2};
+int aktuelleSkifteSpor = 102;
 
 
 //til udregnign af skiftespor
@@ -233,7 +233,7 @@ void setup(void)
 
   pinMode(trigPin, OUTPUT); // Sets the trigPin as an Output
   pinMode(echoPin, INPUT); // Sets the echoPin as an Input
-  Serial.begin(9600); // Starts the serial communication
+  Serial.begin(115200); // Starts the serial communication
 
   assemble_setup_msg();
   //Start the timer
@@ -242,7 +242,7 @@ void setup(void)
 
 void loop(void)
 {
-  delay(200);
+  delay(300);
   Ultrasound();
   Serial.print("Distance: ");
   Serial.println(distance);
@@ -292,14 +292,16 @@ void assemble_dcc_msg()
     }
     else if (aktuelleSkifteSpor == 102)
     {
-      Serial.println("Skiftespor drej");
+      if (trainTrack == 0)
+      {
+        Serial.println("Skiftespor drej");
         msg[1].data[0] = skifteSpor102.address;
         msg[2].data[0] = skifteSpor102.address;
         msg[1].data[1] = skifteSpor102.turnCommando1;
         msg[2].data[1] = skifteSpor102.turnCommando2;
   
         changeTrainTracks = false;
-        trainTrack = 1;
+        trainTrack = 1;  
       }
       else if (trainTrack == 1)
       {
@@ -311,6 +313,7 @@ void assemble_dcc_msg()
   
         changeTrainTracks = false;
         trainTrack = 0;
+      }
     }
   }
   else // Send til tog
@@ -369,7 +372,7 @@ void assemble_setup_msg()
     msg[2].data[0] = togAdrTo;
     msg[1].data[1] = train.tStop;
     msg[2].data[1] = train.tStop;
-    setupDone = true;
+   
   }
   else if (counter == 2)
   {
@@ -381,13 +384,16 @@ void assemble_setup_msg()
         msg[2].data[0] = skifteSpor101.address;
         msg[1].data[1] = skifteSpor101.turnCommando1;
         msg[2].data[1] = skifteSpor101.turnCommando2;
+
+        trainTrack = 1; 
       }
       else if (togEtPos == 2)
       {
         msg[1].data[0] = skifteSpor102.address;
         msg[2].data[0] = skifteSpor102.address;
-        msg[1].data[1] = skifteSpor102.turnCommando1;
-        msg[2].data[1] = skifteSpor102.turnCommando2;
+        msg[1].data[1] = skifteSpor102.straightCommando1;
+        msg[2].data[1] = skifteSpor102.straightCommando2;
+        trainTrack = 0; 
       }
     }
     if (locoAdr == togAdrTo)
@@ -398,16 +404,21 @@ void assemble_setup_msg()
         msg[2].data[0] = skifteSpor101.address;
         msg[1].data[1] = skifteSpor101.turnCommando1;
         msg[2].data[1] = skifteSpor101.turnCommando2;
+
+        trainTrack = 1; 
         
       }
       else if (togEtPos == 2)
       {
         msg[1].data[0] = skifteSpor102.address;
         msg[2].data[0] = skifteSpor102.address;
-        msg[1].data[1] = skifteSpor102.turnCommando1;
-        msg[2].data[1] = skifteSpor102.turnCommando2;
+        msg[1].data[1] = skifteSpor102.straightCommando1;
+        msg[2].data[1] = skifteSpor102.straightCommando2;
+
+        trainTrack = 0; 
       }
     }
+    setupDone = true;
   }
   msg[1].data[2] = msg[1].data[0] ^ msg[1].data[1]; // XOR bytes
   msg[2].data[2] = msg[2].data[0] ^ msg[2].data[1];
@@ -476,7 +487,7 @@ void decideTrainOrder()
   }
   else
   {
-    data = train.backwards;
+    data = train.forwards;
   }
 }
 
